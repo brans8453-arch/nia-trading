@@ -6,17 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body{margin:0;font-family:Arial;background:#0b0f1c;color:white}
-header{background:#111a33;padding:10px;text-align:center;position:relative}
-button{padding:10px;margin:5px;border:none;border-radius:6px;background:#1f6bff;color:white;cursor:pointer}
-input,select{padding:10px;margin:5px;width:95%}
-.section{padding:10px;border-bottom:1px solid #222}
+header{background:#111a33;padding:12px;text-align:center;position:sticky;top:0}
+.menu{position:absolute;right:10px;top:12px;font-size:24px;cursor:pointer}
+.section{padding:12px;border-bottom:1px solid #222}
+button{padding:10px;border:none;border-radius:6px;background:#1f6bff;color:white;margin:5px}
+input,select{padding:10px;width:95%;margin:5px}
 .green{color:#00e676}
 .red{color:#ff5252}
-.card{background:#141d3a;padding:6px;margin:5px 0;border-radius:5px}
-.menu{position:absolute;top:10px;right:10px;cursor:pointer;font-size:24px}
-.menu-content{display:none;position:absolute;top:35px;right:10px;background:#111;width:200px;padding:10px;border-radius:6px;z-index:100}
-.menu-content button{width:100%;margin:5px 0}
-a.contact{color:#1f6bff;text-decoration:none;font-size:14px}
+.card{background:#141d3a;padding:8px;margin:5px 0;border-radius:6px}
+#chart{width:100%;height:260px;background:#050816}
+#menuBox{
+display:none;
+position:absolute;
+right:10px;
+top:40px;
+background:#111;
+padding:10px;
+border-radius:6px
+}
 </style>
 </head>
 
@@ -24,46 +31,46 @@ a.contact{color:#1f6bff;text-decoration:none;font-size:14px}
 
 <header>
 <h2>NIA TRADING</h2>
-<div id="userInfo"></div>
+<div id="userInfo">Marché public</div>
 <div class="menu" onclick="toggleMenu()">⋮</div>
-<div class="menu-content" id="menuContent">
-<button onclick="showLogin()">Connexion / Créer compte</button>
-<a href="mailto:contact@niatrading.com" class="contact">Contact urgence</a>
+
+<div id="menuBox">
+<button onclick="openLogin()">Connexion / Compte</button>
 </div>
 </header>
 
-<!-- Zone marché ouverte à tous -->
-<div id="marketOpen" class="section">
-<h3>Marché public</h3>
-BTC/USDT : <span id="BTC">Loading...</span><br>
-ETH/USDT : <span id="ETH">Loading...</span>
+<!-- GRAND GRAPHIQUE -->
+<div class="section">
+<canvas id="chart"></canvas>
 </div>
 
-<!-- Interface utilisateur après connexion -->
+<!-- PRIX -->
+<div class="section">
+<h3>Marché Live</h3>
+BTC/USDT : <span id="BTC"></span><br>
+ETH/USDT : <span id="ETH"></span>
+</div>
+
+<!-- ZONE UTILISATEUR -->
 <div id="app" style="display:none">
 
 <div class="section">
-<h3>Trading Spot</h3>
+<h3>Trading</h3>
 <select id="pair">
 <option value="BTC">BTC</option>
 <option value="ETH">ETH</option>
 </select>
 <input id="qty" placeholder="Quantité">
-<button onclick="trade('buy')">BUY</button>
-<button onclick="trade('sell')">SELL</button>
+<button onclick="trade('buy')">ACHETER</button>
+<button onclick="trade('sell')">VENDRE</button>
 </div>
 
 <div class="section">
 <h3>Wallet</h3>
-Solde USDT : <span id="balance"></span><br>
+Solde : <span id="balance"></span><br>
 <button onclick="modal('deposit')">Dépôt</button>
 <button onclick="modal('withdraw')">Retrait</button>
 <button onclick="modal('send')">Envoyer</button>
-</div>
-
-<div class="section">
-<h3>Signaux Trading</h3>
-<div id="signalBox">Aucun signal actif</div>
 </div>
 
 <div class="section">
@@ -71,85 +78,88 @@ Solde USDT : <span id="balance"></span><br>
 <div id="history"></div>
 </div>
 
-<div class="section">
-<button onclick="adminPanel()">Admin Panel</button>
 </div>
 
-</div>
-
-<!-- Modal -->
-<div id="modal" style="display:none;background:#000a;position:fixed;top:0;left:0;width:100%;height:100%">
-<div id="modalContent" style="background:#111;padding:15px;margin:10% auto;width:90%"></div>
+<!-- MODAL -->
+<div id="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000a">
+<div id="modalContent" style="background:#111;margin:20% auto;padding:15px;width:90%"></div>
 <button onclick="closeModal()">Fermer</button>
 </div>
 
 <script>
-// stockage utilisateurs
 let users=JSON.parse(localStorage.getItem("niaUsers")||"{}");
-if(!users["admin"]){
-  users["admin"]={uid:"ADMIN",code:"admin123",balance:0,wallet:{BTC:0,ETH:0},history:[],ref:"ADMINREF",usedSignal:false};
-}
 let currentUser=null;
-saveUsers();
-
 let prices={BTC:42000,ETH:2300};
-let activeSignal=null;
 
-// menu toggle
+function saveUsers(){
+localStorage.setItem("niaUsers",JSON.stringify(users));
+}
+
 function toggleMenu(){
-  let menu=document.getElementById("menuContent");
-  menu.style.display=(menu.style.display=="block"?"none":"block");
+menuBox.style.display =
+menuBox.style.display=="block"?"none":"block";
 }
 
-// afficher connexion
-function showLogin(){
-  let html=`<h3>Connexion / Création compte</h3>
-  <input id="email" placeholder="Email">
-  <input id="code" placeholder="Code 6 chiffres">
-  <button onclick="login()">Entrer</button>`;
-  modalContent.innerHTML=html;
-  modal.style.display="block";
+function openLogin(){
+modalContent.innerHTML=`
+<h3>Connexion / Compte</h3>
+<input id="email" placeholder="Email">
+<input id="code" placeholder="Code 6 chiffres">
+<button onclick="login()">Entrer</button>`;
+modal.style.display="block";
 }
 
-function saveUsers(){localStorage.setItem("niaUsers",JSON.stringify(users));}
-
-// connexion ou création
 function login(){
-let email=document.getElementById("email").value.trim();
-let code=document.getElementById("code").value.trim();
-if(!email||code.length<6) return alert("Infos invalides");
+let email=document.getElementById("email").value;
+let code=document.getElementById("code").value;
 
 if(!users[email]){
-users[email]={uid:"NIA"+Math.floor(Math.random()*100000),code,balance:0,wallet:{BTC:0,ETH:0},history:[],ref:"REF"+Math.floor(Math.random()*10000),usedSignal:false};
+users[email]={
+uid:"NIA"+Math.floor(Math.random()*100000),
+code,
+balance:0,
+wallet:{BTC:0,ETH:0},
+history:[]
+};
 }
 
-if(users[email].code!==code) return alert("Code incorrect");
+if(users[email].code!==code){
+alert("Code incorrect");
+return;
+}
 
 currentUser=users[email];
-marketOpen.style.display="none";
 app.style.display="block";
-modal.style.display="none";
+userInfo.textContent="UID: "+currentUser.uid;
 updateUI();
+closeModal();
 }
 
 function updateUI(){
-balance.textContent=currentUser.balance.toFixed(2)+" USDT";
-userInfo.innerHTML="UID: "+currentUser.uid+" | "+currentUser.balance.toFixed(2)+" USDT | "+currentUser.ref;
+balance.textContent=currentUser.balance+" USDT";
 renderHistory();
 }
 
-function addHistory(t){currentUser.history.push(new Date().toLocaleTimeString()+" - "+t); saveUsers(); renderHistory();}
+function addHistory(t){
+currentUser.history.push(t);
+saveUsers();
+renderHistory();
+}
 
 function renderHistory(){
 history.innerHTML="";
-currentUser.history.slice(-10).reverse().forEach(h=>{history.innerHTML+="<div class='card'>"+h+"</div>";});
+currentUser.history.slice(-8).reverse().forEach(h=>{
+history.innerHTML+="<div class='card'>"+h+"</div>";
+});
 }
 
 function trade(side){
 let pair=document.getElementById("pair").value;
 let qty=parseFloat(document.getElementById("qty").value);
-if(!qty) return alert("Quantité invalide");
+if(!qty) return;
+
 let total=qty*prices[pair];
+
 if(side=="buy"){
 if(currentUser.balance<total) return alert("Solde insuffisant");
 currentUser.balance-=total;
@@ -161,39 +171,100 @@ currentUser.wallet[pair]-=qty;
 currentUser.balance+=total;
 addHistory("Vente "+qty+" "+pair);
 }
-saveUsers(); updateUI(); alert("Trade exécuté");
+
+saveUsers();
+updateUI();
 }
 
 function modal(type){
-let c=modalContent;
-if(type=="deposit"){c.innerHTML=`Montant<input id="amt"><button onclick="deposit()">Confirmer</button>`;}
-if(type=="withdraw"){c.innerHTML=`Montant<input id="amt"><button onclick="withdraw()">Confirmer</button>`;}
-if(type=="send"){c.innerHTML=`Email destinataire<input id="dest">Montant<input id="amt"><button onclick="send()">Confirmer</button>`;}
+if(type=="deposit"){
+modalContent.innerHTML=`Montant<input id="amt">
+<button onclick="deposit()">Confirmer</button>`;
+}
+if(type=="withdraw"){
+modalContent.innerHTML=`Montant<input id="amt">
+<button onclick="withdraw()">Confirmer</button>`;
+}
+if(type=="send"){
+modalContent.innerHTML=`Email<input id="dest">
+Montant<input id="amt">
+<button onclick="send()">Confirmer</button>`;
+}
 modal.style.display="block";
 }
 
-function deposit(){let amt=parseFloat(amt.value); currentUser.balance+=amt; addHistory("Dépôt "+amt+" USDT"); saveUsers(); updateUI(); closeModal();}
-function withdraw(){let amt=parseFloat(amt.value); if(currentUser.balance<amt) return alert("Solde insuffisant"); currentUser.balance-=amt; addHistory("Retrait "+amt+" USDT"); saveUsers(); updateUI(); closeModal();}
-function send(){let dest=dest.value; let amt=parseFloat(amt.value); if(!users[dest]) return alert("Utilisateur introuvable"); if(currentUser.balance<amt) return alert("Solde insuffisant"); currentUser.balance-=amt; users[dest].balance+=amt; addHistory("Envoi "+amt+" USDT vers "+dest); saveUsers(); updateUI(); closeModal();}
-function closeModal(){modal.style.display="none";}
-
-// admin panel
-function adminPanel(){
-let p=prompt("Mot de passe admin");
-if(p!=="admin123") return;
-let email=prompt("Email utilisateur à créditer"); 
-let amt=parseFloat(prompt("Montant à créditer")); 
-if(users[email]){users[email].balance+=amt; saveUsers(); alert("Compte crédité");}
+function deposit(){
+let amt=parseFloat(amt.value);
+currentUser.balance+=amt;
+addHistory("Dépôt "+amt);
+saveUsers();
+updateUI();
+closeModal();
 }
 
-// marché dynamique
-function market(){for(let p in prices){prices[p]+=Math.random()*200-100; let el=document.getElementById(p); if(el){el.textContent=Math.round(prices[p]); el.className=(Math.random()>0.5?"green":"red");}}}
+function withdraw(){
+let amt=parseFloat(amt.value);
+currentUser.balance-=amt;
+addHistory("Retrait "+amt);
+saveUsers();
+updateUI();
+closeModal();
+}
+
+function send(){
+let dest=dest.value;
+let amt=parseFloat(amt.value);
+
+if(!users[dest]) return alert("Introuvable");
+
+currentUser.balance-=amt;
+users[dest].balance+=amt;
+
+addHistory("Envoi "+amt+" à "+dest);
+saveUsers();
+updateUI();
+closeModal();
+}
+
+function closeModal(){
+modal.style.display="none";
+}
+
+/* PRIX MARCHÉ */
+function market(){
+for(let p in prices){
+prices[p]+=Math.random()*200-100;
+let el=document.getElementById(p);
+if(el){
+el.textContent=Math.round(prices[p]);
+el.className=(Math.random()>0.5?"green":"red");
+}
+}
+}
 setInterval(market,3000);
 
-// signaux trading
-function generateSignal(){let h=new Date().getHours(); if([9,13,16,18].includes(h) && !currentUser?.usedSignal){let list=["BTC BUY","BTC SELL","ETH BUY","ETH SELL"]; activeSignal=list[Math.floor(Math.random()*list.length)]; if(currentUser){currentUser.usedSignal=true;} signalBox.innerHTML="Signal actif : "+activeSignal+" (15 min)"; setTimeout(()=>{activeSignal=null; signalBox.innerHTML="Signal expiré";},900000);}}
-setInterval(generateSignal,60000);
+/* GRAPH SIMPLE */
+let ctx=document.getElementById("chart").getContext("2d");
+let data=Array(50).fill(200);
 
+function drawChart(){
+ctx.clearRect(0,0,chart.width,chart.height);
+ctx.beginPath();
+ctx.strokeStyle="#1f6bff";
+
+data.forEach((v,i)=>{
+let x=i*chart.width/data.length;
+let y=chart.height-v;
+if(i===0) ctx.moveTo(x,y);
+else ctx.lineTo(x,y);
+});
+ctx.stroke();
+
+data.push(data[data.length-1]+Math.random()*20-10);
+data.shift();
+}
+
+setInterval(drawChart,1000);
 </script>
 
 </body>
