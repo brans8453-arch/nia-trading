@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>NIA TRADING</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;font-family:Arial;background:#0b0f1c;color:white}
+header{background:#111a33;padding:10px;text-align:center}
+button{padding:10px;margin:5px;border:none;border-radius:6px;background:#1f6bff;color:white}
+input,select{padding:10px;margin:5px;width:95%}
+.section{padding:10px;border-bottom:1px solid #222}
+.green{color:#00e676}
+.red{color:#ff5252}
+.card{background:#141d3a;padding:6px;margin:5px 0;border-radius:5px}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>NIA TRADING</h2>
+<div id="userInfo"></div>
+</header>
+
+<div id="auth" class="section">
+<h3>Connexion / Création compte</h3>
+<input id="email" placeholder="Email">
+<input id="code" placeholder="Code secret 6 chiffres">
+<button onclick="login()">Entrer</button>
+</div>
+
+<div id="app" style="display:none">
+
+<div class="section">
+<h3>Marché</h3>
+BTC/USDT : <span id="BTC"></span><br>
+ETH/USDT : <span id="ETH"></span>
+</div>
+
+<div class="section">
+<h3>Trading Spot</h3>
+<select id="pair">
+<option value="BTC">BTC</option>
+<option value="ETH">ETH</option>
+</select>
+<input id="qty" placeholder="Quantité">
+<button onclick="trade('buy')">BUY</button>
+<button onclick="trade('sell')">SELL</button>
+</div>
+
+<div class="section">
+<h3>Wallet</h3>
+Solde USDT : <span id="balance"></span><br>
+<button onclick="modal('deposit')">Dépôt</button>
+<button onclick="modal('withdraw')">Retrait</button>
+<button onclick="modal('send')">Envoyer</button>
+</div>
+
+<div class="section">
+<h3>Signaux Trading</h3>
+<div id="signalBox">Aucun signal actif</div>
+</div>
+
+<div class="section">
+<h3>Historique</h3>
+<div id="history"></div>
+</div>
+
+<div class="section">
+<button onclick="adminPanel()">Admin Panel</button>
+</div>
+
+</div>
+
+<div id="modal" style="display:none;background:#000a;position:fixed;top:0;left:0;width:100%;height:100%">
+<div id="modalContent" style="background:#111;padding:15px;margin:10% auto;width:90%"></div>
+<button onclick="closeModal()">Fermer</button>
+</div>
+
+<script>
+let users=JSON.parse(localStorage.getItem("niaUsers")||"{}");
+let currentUser=null;
+
+let prices={BTC:42000,ETH:2300};
+let activeSignal=null;
+
+function saveUsers(){
+localStorage.setItem("niaUsers",JSON.stringify(users));
+}
+
+function login(){
+let email=emailInput.value.trim();
+let code=codeInput.value.trim();
+
+if(!email||code.length<6) return alert("Infos invalides");
+
+if(!users[email]){
+users[email]={
+uid:"NIA"+Math.floor(Math.random()*100000),
+code,
+balance:0,
+wallet:{BTC:0,ETH:0},
+history:[],
+ref:"REF"+Math.floor(Math.random()*10000),
+usedSignal:false
+};
+}
+
+if(users[email].code!==code) return alert("Code incorrect");
+
+currentUser=users[email];
+auth.style.display="none";
+app.style.display="block";
+
+updateUI();
+}
+
+function updateUI(){
+balance.textContent=currentUser.balance.toFixed(2)+" USDT";
+userInfo.innerHTML=
+"UID: "+currentUser.uid+" | "+currentUser.balance.toFixed(2)+" USDT";
+renderHistory();
+}
+
+function addHistory(t){
+currentUser.history.push(new Date().toLocaleTimeString()+" - "+t);
+saveUsers();
+renderHistory();
+}
+
+function renderHistory(){
+history.innerHTML="";
+currentUser.history.slice(-10).reverse().forEach(h=>{
+history.innerHTML+="<div class='card'>"+h+"</div>";
+});
+}
+
+function trade(side){
+let pair=pairSelect.value;
+let qty=parseFloat(qtyInput.value);
+if(!qty) return alert("Quantité invalide");
+
+let total=qty*prices[pair];
+
+if(side=="buy"){
+if(currentUser.balance<total) return alert("Solde insuffisant");
+currentUser.balance-=total;
+currentUser.wallet[pair]+=qty;
+addHistory("Achat "+qty+" "+pair);
+}else{
+if(currentUser.wallet[pair]<qty) return alert("Crypto insuffisante");
+currentUser.wallet[pair]-=qty;
+currentUser.balance+=total;
+addHistory("Vente "+qty+" "+pair);
+}
+
+saveUsers();
+updateUI();
+alert("Trade exécuté");
+}
+
+function modal(type){
+let c=modalContent;
+
+if(type=="deposit"){
+c.innerHTML=`Montant<input id="amt">
+<button onclick="deposit()">Confirmer</button>`;
+}
+
+if(type=="withdraw"){
+c.innerHTML=`Montant<input id="amt">
+<button onclick="withdraw()">Confirmer</button>`;
+}
+
+if(type=="send"){
+c.innerHTML=`Email destinataire<input id="dest">
+Montant<input id="amt">
+<button onclick="send()">Confirmer</button>`;
+}
+
+modalBox.style.display="block";
+}
+
+function deposit(){
+let amt=parseFloat(amtInput.value);
+currentUser.balance+=amt;
+addHistory("Dépôt "+amt+" USDT");
+saveUsers();
+updateUI();
+closeModal();
+}
+
+function withdraw(){
+let amt=parseFloat(amtInput.value);
+if(currentUser.balance<amt) return alert("Solde insuffisant");
+currentUser.balance-=amt;
+addHistory("Retrait "+amt+" USDT");
+saveUsers();
+updateUI();
+closeModal();
+}
+
+function send(){
+let dest=destInput.value;
+let amt=parseFloat(amtInput.value);
+
+if(!users[dest]) return alert("Utilisateur introuvable");
+if(currentUser.balance<amt) return alert("Solde insuffisant");
+
+currentUser.balance-=amt;
+users[dest].balance+=amt;
+
+addHistory("Envoi "+amt+" USDT vers "+dest);
+saveUsers();
+updateUI();
+closeModal();
+}
+
+function closeModal(){
+modalBox.style.display="none";
+}
+
+function adminPanel(){
+let p=prompt("Mot de passe admin");
+if(p!=="admin243") return;
+
+let email=prompt("Email utilisateur");
+let amt=parseFloat(prompt("Montant à créditer"));
+
+if(users[email]){
+users[email].balance+=amt;
+saveUsers();
+alert("Compte crédité");
+}
+}
+
+function market(){
+for(let p in prices){
+prices[p]+=Math.random()*200-100;
+let el=document.getElementById(p);
+if(el){
+el.textContent=Math.round(prices[p]);
+el.className=(Math.random()>0.5?"green":"red");
+}
+}
+}
+setInterval(market,3000);
+
+function generateSignal(){
+let h=new Date().getHours();
+if([9,13,16,18].includes(h)){
+let list=["BTC BUY","BTC SELL","ETH BUY","ETH SELL"];
+activeSignal=list[Math.floor(Math.random()*list.length)];
+signalBox.innerHTML="Signal actif : "+activeSignal+" (15 min)";
+setTimeout(()=>{
+activeSignal=null;
+signalBox.innerHTML="Signal expiré";
+},900000);
+}
+}
+setInterval(generateSignal,60000);
+</script>
+
+</body>
+</html>
